@@ -54,14 +54,16 @@ CANDIDATOS = {
     "ayud2": ["AYUDANTE 2", "AYUDANTE2"],
     "zona": ["ZONA"],
     "cliente": ["CLIENTE"],
+    "lineas": ["LINEAS", "LINEA"],
 }
 POSICION = {"anio": 0, "mes": 1, "semana": 2, "fecha": 8, "planilla": 13, "clientes": 14, "bultos": 15,
-            "tipo": 22, "camion": 23, "chofer": 24, "ayud1": 25, "ayud2": 26, "zona": 33, "cliente": 34}
+            "tipo": 22, "camion": 23, "chofer": 24, "ayud1": 25, "ayud2": 26, "zona": 33, "cliente": 34, "lineas": 52}
 ETIQUETAS = {
     "anio": "Año (A)", "mes": "Mes (B)", "semana": "Semana (C)", "fecha": "Fecha (I)",
     "planilla": "Planilla (N)", "clientes": "Cantidad de clientes (O)", "bultos": "Bultos (P)",
     "tipo": "Tipo de reparto (W)", "camion": "Camión (X)", "chofer": "Chofer Real (Y)",
     "ayud1": "Ayudante 1 (Z)", "ayud2": "Ayudante 2 (AA)", "zona": "Zona (AH)", "cliente": "Cliente (AI)",
+    "lineas": "Línea 0/1 (BA)",
 }
 
 
@@ -197,6 +199,7 @@ def preparar(raw, cols):
     unificar_personas(df, ["chofer", "ayud1", "ayud2"])
     df["clientes"] = a_num(df["clientes"])
     df["bultos"] = a_num(df["bultos"])
+    df["lineas"] = a_num(df["lineas"])
 
     # Fecha, Mes (AAAA-MM) y Semana (AAAA-Sxx). Se derivan de la fecha; si falta, de las columnas Año/Mes/Semana.
     df["Fecha"] = parsear_fechas(df["fecha"])
@@ -211,9 +214,9 @@ def preparar(raw, cols):
 
     df = df.rename(columns={"tipo": "Tipo", "camion": "Camion", "chofer": "Chofer", "ayud1": "Ayudante1",
                             "ayud2": "Ayudante2", "zona": "Zona", "cliente": "Cliente", "planilla": "Planilla",
-                            "clientes": "Clientes", "bultos": "Bultos"})
+                            "clientes": "Clientes", "bultos": "Bultos", "lineas": "Linea"})
     df = df[["Fecha", "Mes", "Semana", "Planilla", "Tipo", "Camion", "Chofer", "Ayudante1", "Ayudante2",
-             "Zona", "Cliente", "Clientes", "Bultos"]]
+             "Zona", "Cliente", "Clientes", "Bultos", "Linea"]]
     # Se descartan filas vacías (la planilla trae filas en blanco al final)
     df = df.dropna(how="all", subset=["Camion", "Chofer", "Zona", "Clientes"]).reset_index(drop=True)
     df.insert(0, "ViajeID", np.arange(1, len(df) + 1))
@@ -340,7 +343,15 @@ largo_cat = largo[largo["Categoria"] != "Sin dato"]
 # ----------------------------------------------------------------------------------------------
 es_interior = v["Zona"].isin(INTERIOR)
 n_interior = int(es_interior.sum())
-n_linea = int((v["Zona"].notna() & ~es_interior).sum())
+if v["Linea"].notna().any():
+    # Definición de la planilla: viaje de línea = fila con valor 1 en la columna "Lineas"
+    # (zonas alejadas de la ciudad); SAN JUSTO y SAN JAVIER son Interior y nunca se cuentan como línea
+    n_linea = int(((v["Linea"] == 1) & ~es_interior).sum())
+    ayuda_linea = "Viajes a zonas alejadas de la ciudad: valor 1 en la columna Lineas (BA), sin San Justo ni San Javier."
+else:
+    # Respaldo si no existe la columna: todo lo que no es SAN JUSTO ni SAN JAVIER
+    n_linea = int((v["Zona"].notna() & ~es_interior).sum())
+    ayuda_linea = "Sin columna Lineas: viajes a todas las zonas excepto SAN JUSTO y SAN JAVIER."
 es_raf = contiene(v["Zona"], "RAFAELA")
 es_sun = contiene(v["Zona"], "SUNCHALES")
 es_parana = contiene(v["Zona"], "PARANA")
@@ -350,7 +361,7 @@ pct_liv = n_liv / len(v_cat) * 100 if len(v_cat) else 0
 st.caption(f"{len(v)} viajes · {v['Chofer'].nunique()} choferes · {v['Camion'].nunique()} camiones")
 
 k = st.columns(5)
-k[0].metric("Zonas de línea", n_linea, help="Viajes a todas las zonas excepto SAN JUSTO y SAN JAVIER.")
+k[0].metric("Zonas de línea", n_linea, help=ayuda_linea)
 k[1].metric("Interior", n_interior, help="Viajes a SAN JUSTO y SAN JAVIER.")
 k[2].metric("Rafaela + Sunchales", int(es_raf.sum() + es_sun.sum()),
             delta=f"Rafaela {int(es_raf.sum())} · Sunchales {int(es_sun.sum())}", delta_color="off")
